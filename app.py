@@ -6,13 +6,18 @@ import requests
 
 app = Flask(__name__)
 
-# Download and load the .pkl model from Dropbox
+# Load model from Dropbox
 DROPBOX_URL = "https://www.dropbox.com/scl/fi/iu2uon64thsixcpprtp42/flight_delay_model.pkl?rlkey=um626etvhfu9e7poy2mc3ethq&st=4mwhsvo0&dl=1"
-response = requests.get(DROPBOX_URL)
-if response.status_code == 200:
-    model = pickle.loads(response.content)
-else:
-    raise Exception(f"Failed to load model from Dropbox: {response.status_code}")
+
+def load_model():
+    try:
+        response = requests.get(DROPBOX_URL)
+        response.raise_for_status()
+        return pickle.loads(response.content)
+    except Exception as e:
+        raise RuntimeError(f"Could not load model: {e}")
+
+model = load_model()
 
 @app.route("/")
 def home():
@@ -21,24 +26,25 @@ def home():
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
-        # Get form data
+        # Get user inputs
         flight_date = request.form["flight_date"]
         carrier = int(request.form["carrier"])
         origin = int(request.form["origin"])
         destination = int(request.form["destination"])
         crs_dep_time = int(request.form["crs_dep_time"])
 
-        # Parse date
+        # Extract date features
         flight_datetime = datetime.strptime(flight_date, "%Y-%m-%d")
         month = flight_datetime.month - 1
         day = flight_datetime.day - 1
         weekday = flight_datetime.isoweekday() - 1
 
+        # Prepare features
         features = np.array([[month, day, weekday, carrier, origin, destination, crs_dep_time, 0]])
         prediction = model.predict(features)[0]
         prediction_minutes = max(round(prediction, 2), 0)
 
-        # Delay category
+        # Determine category
         if prediction_minutes < 15:
             delay_category = "Low"
         elif prediction_minutes < 45:
@@ -46,10 +52,10 @@ def predict():
         else:
             delay_category = "High"
 
-        # Delay probability (mock calculation)
+        # Calculate probability
         probability = min(int((prediction_minutes / 60) * 100), 100)
 
-        # Mock contributing factors
+        # Contributing factors (mocked)
         factors = ["Weather", "Air Traffic", "Airline History"]
 
         return render_template("index.html",
@@ -58,8 +64,10 @@ def predict():
                                probability=probability,
                                timestamp=datetime.now().strftime("%I:%M:%S %p"),
                                contributing_factors=factors)
-    except Exception as e:
-        return render_template("index.html", error=str(e))
 
+    except Exception as e:
+        return render_template("index.html", error=f"Error: {str(e)}")
+
+# Only for local development; for production, use gunicorn or other WSGI server
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8000)
