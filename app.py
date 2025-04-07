@@ -7,29 +7,40 @@ import os
 
 app = Flask(__name__)
 
-# Download and load the .pkl model from Dropbox
+MODEL_PATH = "flight_delay_model.pkl"
 DROPBOX_URL = "https://www.dropbox.com/scl/fi/iu2uon64thsixcpprtp42/flight_delay_model.pkl?rlkey=um626etvhfu9e7poy2mc3ethq&st=4mwhsvo0&dl=1"
-response = requests.get(DROPBOX_URL)
-if response.status_code == 200:
-    model = pickle.loads(response.content)
-else:
-    raise Exception(f"Failed to load model from Dropbox: {response.status_code}")
+
+# Load model with download fallback
+def load_model():
+    if not os.path.exists(MODEL_PATH):
+        print("Downloading model from Dropbox...")
+        response = requests.get(DROPBOX_URL)
+        if response.status_code == 200:
+            with open(MODEL_PATH, "wb") as f:
+                f.write(response.content)
+            print("Model downloaded and saved.")
+        else:
+            raise Exception(f"Failed to download model: {response.status_code}")
+    
+    print("Loading model...")
+    with open(MODEL_PATH, "rb") as f:
+        return pickle.load(f)
+
+model = load_model()
 
 @app.route("/")
 def home():
-    return render_templates("index.html")
+    return render_template("index.html")
 
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
-        # Get form data
         flight_date = request.form["flight_date"]
         carrier = int(request.form["carrier"])
         origin = int(request.form["origin"])
         destination = int(request.form["destination"])
         crs_dep_time = int(request.form["crs_dep_time"])
 
-        # Parse date
         flight_datetime = datetime.strptime(flight_date, "%Y-%m-%d")
         month = flight_datetime.month - 1
         day = flight_datetime.day - 1
@@ -39,7 +50,6 @@ def predict():
         prediction = model.predict(features)[0]
         prediction_minutes = max(round(prediction, 2), 0)
 
-        # Delay category
         if prediction_minutes < 15:
             delay_category = "Low"
         elif prediction_minutes < 45:
@@ -47,10 +57,7 @@ def predict():
         else:
             delay_category = "High"
 
-        # Delay probability (mock calculation)
         probability = min(int((prediction_minutes / 60) * 100), 100)
-
-        # Mock contributing factors
         factors = ["Weather", "Air Traffic", "Airline History"]
 
         return render_template("index.html",
@@ -60,8 +67,8 @@ def predict():
                                timestamp=datetime.now().strftime("%I:%M:%S %p"),
                                contributing_factors=factors)
     except Exception as e:
-        return render_templates("index.html", error=str(e))
+        return render_template("index.html", error=str(e))
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000)) 
+    port = int(os.environ.get("PORT", 8000))
     app.run(debug=False, host="0.0.0.0", port=port)
