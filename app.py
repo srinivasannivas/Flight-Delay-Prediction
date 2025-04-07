@@ -17,7 +17,7 @@ else:
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return render_templates("index.html")
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -60,7 +60,7 @@ def predict():
                                timestamp=datetime.now().strftime("%I:%M:%S %p"),
                                contributing_factors=factors)
     except Exception as e:
-        return render_template("index.html", error=str(e))
+        return render_templates("index.html", error=str(e))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000)) 
