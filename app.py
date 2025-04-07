@@ -10,23 +10,27 @@ app = Flask(__name__)
 MODEL_PATH = "flight_delay_model.pkl"
 DROPBOX_URL = "https://www.dropbox.com/scl/fi/iu2uon64thsixcpprtp42/flight_delay_model.pkl?rlkey=um626etvhfu9e7poy2mc3ethq&st=4mwhsvo0&dl=1"
 
-# Load model with download fallback
+model = None
+
 def load_model():
+    global model
+    if model is not None:
+        return model
+
     if not os.path.exists(MODEL_PATH):
         print("Downloading model from Dropbox...")
         response = requests.get(DROPBOX_URL)
         if response.status_code == 200:
             with open(MODEL_PATH, "wb") as f:
                 f.write(response.content)
-            print("Model downloaded and saved.")
+            print("Model downloaded.")
         else:
             raise Exception(f"Failed to download model: {response.status_code}")
     
-    print("Loading model...")
     with open(MODEL_PATH, "rb") as f:
-        return pickle.load(f)
-
-model = load_model()
+        model = pickle.load(f)
+        print("Model loaded.")
+    return model
 
 @app.route("/")
 def home():
@@ -35,6 +39,8 @@ def home():
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
+        model = load_model()  # Load only when needed
+
         flight_date = request.form["flight_date"]
         carrier = int(request.form["carrier"])
         origin = int(request.form["origin"])
